@@ -1,6 +1,6 @@
 targets:
   - os: ubuntu
-    os_version: "22.04"
+    os_version: "24.04"
     nginx_version: "1.24.0"
     otel_version: "0.1.2"
     architectures:

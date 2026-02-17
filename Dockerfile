@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ubuntu:22.04
+ARG BASE_IMAGE=ubuntu:24.04
 FROM ${BASE_IMAGE} AS builder
 
 ARG NGINX_VERSION=1.24.0
@@ -30,7 +30,7 @@ RUN cmake -B nginx-otel-build -S nginx-otel \
 # Strip debug symbols to reduce size
 RUN strip --strip-debug /build/nginx-otel-build/ngx_otel_module.so
 
-# Build .deb package
+# Build apt-compatible .deb package
 ARG MODULE_VERSION=0.1.2
 RUN mkdir -p /deb/nginx-mod-otel/DEBIAN \
              /deb/nginx-mod-otel/usr/lib/nginx/modules \
@@ -43,7 +43,7 @@ RUN mkdir -p /deb/nginx-mod-otel/DEBIAN \
 Package: nginx-mod-otel
 Version: ${MODULE_VERSION}-1
 Architecture: $(dpkg --print-architecture)
-Depends: nginx (>= 1.24.0), libc-ares2, libre2-10, libssl3
+Depends: nginx (>= 1.24.0), libc-ares2, libre2-11, libssl3t64
 Maintainer: local <local@localhost>
 Section: httpd
 Priority: optional
@@ -51,7 +51,25 @@ Description: OpenTelemetry dynamic module for nginx
  Provides distributed tracing via the OpenTelemetry protocol.
  Built from nginxinc/nginx-otel ${NGINX_OTEL_TAG} against nginx ${NGINX_VERSION}.
 EOF
-RUN dpkg-deb --build /deb/nginx-mod-otel /deb/nginx-mod-otel.deb
+# postinst: enable module on install
+RUN cat > /deb/nginx-mod-otel/DEBIAN/postinst <<'EOF'
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ] && [ -d /etc/nginx/modules-enabled ]; then
+  ln -sf /usr/share/nginx/modules-available/mod-otel.conf \
+    /etc/nginx/modules-enabled/50-mod-otel.conf
+fi
+EOF
+# postrm: disable module on removal
+RUN cat > /deb/nginx-mod-otel/DEBIAN/postrm <<'EOF'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+  rm -f /etc/nginx/modules-enabled/50-mod-otel.conf
+fi
+EOF
+RUN chmod 755 /deb/nginx-mod-otel/DEBIAN/postinst /deb/nginx-mod-otel/DEBIAN/postrm
+RUN dpkg-deb --root-owner-group --build /deb/nginx-mod-otel /deb/nginx-mod-otel.deb
 
 # Final stage — .so and .deb
 FROM scratch
