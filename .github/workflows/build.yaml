@@ -1,0 +1,61 @@
+name: Build nginx-otel module
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate matrix from manifest
+        id: set-matrix
+        run: |
+          matrix=$(yq -o=json '.targets' manifest.yaml | jq -c '{include: [.[] | {os, os_version, nginx_version, otel_version, architectures: (.architectures | join(","))}]}')
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: generate-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build artifacts
+        run: |
+          IFS=',' read -ra ARCHS <<< "${{ matrix.architectures }}"
+          for arch in "${ARCHS[@]}"; do
+            echo "::group::Building for ${arch}"
+            outdir="dist/${{ matrix.os }}${{ matrix.os_version }}-nginx${{ matrix.nginx_version }}-${arch}"
+            mkdir -p "${outdir}"
+            docker buildx build \
+              --platform "linux/${arch}" \
+              --build-arg BASE_IMAGE="${{ matrix.os }}:${{ matrix.os_version }}" \
+              --build-arg NGINX_VERSION="${{ matrix.nginx_version }}" \
+              --build-arg NGINX_OTEL_TAG="v${{ matrix.otel_version }}" \
+              --build-arg MODULE_VERSION="${{ matrix.otel_version }}" \
+              --output "type=local,dest=${outdir}" \
+              .
+            echo "::endgroup::"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nginx-mod-otel-${{ matrix.os }}${{ matrix.os_version }}-nginx${{ matrix.nginx_version }}
+          path: dist/
+          if-no-files-found: error
