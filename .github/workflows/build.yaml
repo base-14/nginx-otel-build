@@ -18,58 +18,39 @@ jobs:
       - name: Generate matrix from manifest
         id: set-matrix
         run: |
-          matrix=$(yq -o=json '.targets' manifest.yaml | jq -c '{include: [.[] | {os, os_version, nginx_version, otel_version, architectures: (.architectures | join(","))}]}')
+          matrix=$(yq -o=json '.targets' manifest.yaml | jq -c '{include: [.[] | .architectures[] as $arch | {os, os_version, nginx_version, otel_version, arch: $arch}]}')
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: generate-matrix
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Build artifacts
         run: |
-          IFS=',' read -ra ARCHS <<< "${{ matrix.architectures }}"
-          for arch in "${ARCHS[@]}"; do
-            echo "::group::Building for ${arch}"
-            outdir="dist/${{ matrix.os }}${{ matrix.os_version }}-nginx${{ matrix.nginx_version }}-${arch}"
-            mkdir -p "${outdir}"
-            docker buildx build \
-              --platform "linux/${arch}" \
-              --build-arg BASE_IMAGE="${{ matrix.os }}:${{ matrix.os_version }}" \
-              --build-arg NGINX_VERSION="${{ matrix.nginx_version }}" \
-              --build-arg NGINX_OTEL_TAG="v${{ matrix.otel_version }}" \
-              --build-arg MODULE_VERSION="${{ matrix.otel_version }}" \
-              --output "type=local,dest=${outdir}" \
-              .
-            echo "::endgroup::"
-          done
-
-      - name: Rename artifacts with arch suffix
-        run: |
-          for dir in dist/*/; do
-            archdir=$(basename "$dir")
-            for f in "$dir"*.deb; do
-              [ -f "$f" ] && mv "$f" "$dir${archdir}.deb"
-            done
-            for f in "$dir"*.so; do
-              [ -f "$f" ] && mv "$f" "$dir${archdir}.so"
-            done
-          done
+          artifact_name="${{ matrix.os }}${{ matrix.os_version }}-nginx${{ matrix.nginx_version }}-${{ matrix.arch }}"
+          mkdir -p "dist/${artifact_name}"
+          docker buildx build \
+            --build-arg BASE_IMAGE="${{ matrix.os }}:${{ matrix.os_version }}" \
+            --build-arg NGINX_VERSION="${{ matrix.nginx_version }}" \
+            --build-arg NGINX_OTEL_TAG="v${{ matrix.otel_version }}" \
+            --build-arg MODULE_VERSION="${{ matrix.otel_version }}" \
+            --output "type=local,dest=dist/${artifact_name}" \
+            .
+          mv "dist/${artifact_name}/nginx-mod-otel.deb" "dist/${artifact_name}/${artifact_name}.deb"
+          mv "dist/${artifact_name}/ngx_otel_module.so" "dist/${artifact_name}/${artifact_name}.so"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nginx-mod-otel-${{ matrix.os }}${{ matrix.os_version }}-nginx${{ matrix.nginx_version }}
+          name: ${{ matrix.os }}${{ matrix.os_version }}-nginx${{ matrix.nginx_version }}-${{ matrix.arch }}
           path: dist/
           if-no-files-found: error
 
