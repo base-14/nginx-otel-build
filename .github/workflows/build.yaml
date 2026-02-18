@@ -54,6 +54,18 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Rename artifacts with arch suffix
+        run: |
+          for dir in dist/*/; do
+            archdir=$(basename "$dir")
+            for f in "$dir"*.deb; do
+              [ -f "$f" ] && mv "$f" "$dir${archdir}.deb"
+            done
+            for f in "$dir"*.so; do
+              [ -f "$f" ] && mv "$f" "$dir${archdir}.so"
+            done
+          done
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
