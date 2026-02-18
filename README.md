@@ -37,20 +37,26 @@ Artifacts (`ngx_otel_module.so` and `nginx-mod-otel.deb`) will be written to `di
 
 ## Install
 
-Download the `.deb` from the [GitHub Releases](../../releases) page and install with apt:
+Download the `.deb` for your architecture from the [latest release](https://github.com/base-14/nginx-otel-build/releases/latest) and install with apt:
 
 ```sh
-sudo apt install ./nginx-mod-otel-ubuntu24.04-nginx1.24.0.deb
+# arm64
+curl -LO https://github.com/base-14/nginx-otel-build/releases/download/v0.1.1/ubuntu24.04-nginx1.24.0-arm64.deb
+sudo apt install ./ubuntu24.04-nginx1.24.0-arm64.deb
+
+# amd64
+curl -LO https://github.com/base-14/nginx-otel-build/releases/download/v0.1.1/ubuntu24.04-nginx1.24.0-amd64.deb
+sudo apt install ./ubuntu24.04-nginx1.24.0-amd64.deb
 ```
 
-This will resolve and install dependencies (`nginx`, `libc-ares2`, `libre2-11`, `libssl3t64`) automatically and enable the module.
+This will resolve and install dependencies (`nginx`, `libc-ares2`, `libre2`, `libssl`) automatically and enable the module.
 
 ## Releasing
 
 Push a tag to create a release with downloadable artifacts:
 
 ```sh
-git tag v0.1.2
+git tag v0.1.1
 git push --tags
 ```
 
