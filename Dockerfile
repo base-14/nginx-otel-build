@@ -32,7 +32,9 @@ RUN strip --strip-debug /build/nginx-otel-build/ngx_otel_module.so
 
 # Build apt-compatible .deb package
 ARG MODULE_VERSION=0.1.2
-RUN mkdir -p /deb/nginx-mod-otel/DEBIAN \
+RUN LIBRE2_PKG=$(dpkg -S '*/libre2.so.*' 2>/dev/null | grep -v dev | head -1 | cut -d: -f1) \
+  && LIBSSL_PKG=$(dpkg -S '*/libssl.so.*' 2>/dev/null | grep -v dev | head -1 | cut -d: -f1) \
+  && mkdir -p /deb/nginx-mod-otel/DEBIAN \
              /deb/nginx-mod-otel/usr/lib/nginx/modules \
              /deb/nginx-mod-otel/usr/share/nginx/modules-available \
   && cp /build/nginx-otel-build/ngx_otel_module.so \
@@ -43,7 +45,7 @@ RUN mkdir -p /deb/nginx-mod-otel/DEBIAN \
 Package: nginx-mod-otel
 Version: ${MODULE_VERSION}-1
 Architecture: $(dpkg --print-architecture)
-Depends: nginx (>= 1.24.0), libc-ares2, libre2-11, libssl3t64
+Depends: nginx (>= ${NGINX_VERSION}), libc-ares2, ${LIBRE2_PKG}, ${LIBSSL_PKG}
 Maintainer: local <local@localhost>
 Section: httpd
 Priority: optional
